@@ -40,6 +40,50 @@ def login():
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+    
+# ✅ PUBLIC ANALYTICS (no login required — for cross-origin dashboard)
+@admin_bp.route('/public/analytics', methods=['GET'])
+def public_analytics():
+    try:
+        db = current_app.config['DATABASE']
+        ml_engine = current_app.config['ML_ENGINE']
+
+        total_reports  = db.get_total_reports()
+        symptom_counts = db.get_symptom_counts()
+        location_counts = db.get_location_counts()
+        severity_counts = db.get_severity_counts()
+        daily_counts   = db.get_daily_counts(days=14)
+
+        ml_analysis = ml_engine.comprehensive_analysis(
+            daily_counts=daily_counts,
+            symptom_counts=symptom_counts,
+            location_counts=location_counts,
+            severity_counts=severity_counts
+        )
+
+        active_symptoms      = sum(1 for c in symptom_counts.values() if c > 0)
+        most_common_symptom  = max(symptom_counts, key=symptom_counts.get) if symptom_counts else 'None'
+        top_location         = max(location_counts, key=location_counts.get) if location_counts else 'None'
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'overview': {
+                    'total_reports': total_reports,
+                    'active_symptoms': active_symptoms,
+                    'most_common_symptom': most_common_symptom,
+                    'peak_location': top_location
+                },
+                'symptom_counts':  symptom_counts,
+                'location_counts': location_counts,
+                'severity_counts': severity_counts,
+                'daily_counts':    daily_counts,
+                'ml_analysis':     ml_analysis,
+                'timestamp':       datetime.now().isoformat()
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ✅ LOGOUT
