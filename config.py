@@ -19,7 +19,7 @@ class Config:
         'http://localhost:5500',
         'http://127.0.0.1:5500',
         'https://kamya-bot.github.io',
-        'https://pattern-tracking-system.netlify.app',
+        'https://patterntrackingsystem.netlify.app',
     ]
 
     # Cross-origin cookie settings
