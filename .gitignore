@@ -1,0 +1,9 @@
+__pycache__/ 
+*.pyc 
+data/*.db 
+database.db 
+cookies.txt 
+PASTE_CORRECT_PATH_HERE 
+cd 
+routes/code 
+routes/curl 
