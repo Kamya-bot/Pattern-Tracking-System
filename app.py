@@ -5,6 +5,8 @@ Main application entry point
 from flask import Flask, jsonify
 from flask_cors import CORS
 import os
+import hashlib
+
 from config import DevelopmentConfig, ProductionConfig
 from models import Database
 from ml_engine import MLEngine
@@ -20,14 +22,16 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Enable CORS with explicit headers for cross-origin requests
-    CORS(app,
-         resources={r"/api/*": {"origins": app.config['CORS_ORIGINS']}},
-         supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    # Enable CORS
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": app.config['CORS_ORIGINS']}},
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    )
 
-    # Create data directory if it doesn't exist
+    # Ensure data directory exists
     data_dir = os.path.dirname(app.config['DATABASE_PATH'])
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
@@ -36,39 +40,26 @@ def create_app():
     db = Database(app.config['DATABASE_PATH'])
     app.config['DATABASE'] = db
 
-    # Initialize ML engine
+    # Initialize ML engines
     ml_engine = MLEngine(threshold=app.config['ANOMALY_THRESHOLD'])
     app.config['ML_ENGINE'] = ml_engine
 
-    # Initialize Advanced ML engine
     advanced_ml = AdvancedMLEngine(contamination=0.1)
     app.config['ADVANCED_ML_ENGINE'] = advanced_ml
-    print("✅ Advanced ML Engine initialized (Isolation Forest, K-Means, Random Forest)")
+    print("✅ Advanced ML Engine initialized")
 
-    # Register blueprints
+    # Register routes
     app.register_blueprint(student_bp)
     app.register_blueprint(admin_bp)
+
+    # ------------------ BASIC ROUTES ------------------
 
     @app.route('/')
     def index():
         return jsonify({
             'name': 'Pattern Tracking System API',
             'version': '1.0.0',
-            'status': 'running',
-            'endpoints': {
-                'student': {
-                    'POST /api/student/submit-report': 'Submit symptom report',
-                    'GET /api/student/health': 'Health check'
-                },
-                'admin': {
-                    'POST /api/admin/login': 'Admin login',
-                    'POST /api/admin/logout': 'Admin logout',
-                    'GET /api/admin/analytics': 'Get comprehensive analytics',
-                    'GET /api/admin/reports': 'Get all reports',
-                    'GET /api/admin/stats': 'Get quick statistics',
-                    'GET /api/admin/health': 'Health check'
-                }
-            }
+            'status': 'running'
         }), 200
 
     @app.route('/health')
@@ -79,17 +70,55 @@ def create_app():
             'ml_engine': 'initialized'
         }), 200
 
-    @app.route('/api/seed-database', methods=['POST'])
-    def seed_database():
-        """Seed database with sample data - DEVELOPMENT ONLY"""
-        if not app.config['DEBUG']:
-            return jsonify({'success': False, 'error': 'Only available in debug mode'}), 403
+    # ------------------ ADMIN RESET (FIXED) ------------------
+
+    @app.route('/reset-admin')
+    def reset_admin():
         try:
             db = app.config['DATABASE']
-            db.seed_sample_data(num_records=30)
-            return jsonify({'success': True, 'message': 'Database seeded with 30 sample reports'}), 200
+            conn = db.get_connection()
+
+            new_pass = "ADMIN123"
+            hashed = hashlib.sha256(new_pass.encode()).hexdigest()
+
+            # Check if user exists
+            user = conn.execute(
+                "SELECT * FROM users WHERE username=?",
+                ("admin@gmail.com",)
+            ).fetchone()
+
+            if user:
+                conn.execute(
+                    "UPDATE users SET password=? WHERE username=?",
+                    (hashed, "admin@gmail.com")
+                )
+                message = "✅ Admin password UPDATED"
+            else:
+                conn.execute(
+                    "INSERT INTO users (username, password) VALUES (?, ?)",
+                    ("admin@gmail.com", hashed)
+                )
+                message = "✅ Admin user CREATED"
+
+            conn.commit()
+            conn.close()
+
+            return jsonify({
+                "success": True,
+                "message": message,
+                "login": {
+                    "username": "admin@gmail.com",
+                    "password": "ADMIN123"
+                }
+            }), 200
+
         except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({
+                "success": False,
+                "error": str(e)
+            }), 500
+
+    # ------------------ ERROR HANDLERS ------------------
 
     @app.errorhandler(404)
     def not_found(error):
@@ -102,8 +131,9 @@ def create_app():
     return app
 
 
-# WSGI entry point for waitress/gunicorn
+# WSGI entry point
 app = create_app()
+
 
 if __name__ == '__main__':
     print("\n" + "="*60)
@@ -112,12 +142,7 @@ if __name__ == '__main__':
     print(f"📊 Database: {app.config['DATABASE_PATH']}")
     print(f"🔧 Debug Mode: {app.config['DEBUG']}")
     print(f"🌐 CORS Enabled for: {', '.join(app.config['CORS_ORIGINS'])}")
-    print(f"🧠 ML Engine: Initialized (threshold={app.config['ANOMALY_THRESHOLD']})")
     print("="*60)
-    print("\n📍 API Endpoints:")
-    print("   Student: http://localhost:5000/api/student/*")
-    print("   Admin:   http://localhost:5000/api/admin/*")
-    print("="*60 + "\n")
 
     app.run(
         host='0.0.0.0',
