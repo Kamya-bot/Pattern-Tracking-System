@@ -13,21 +13,19 @@ from routes import student_bp, admin_bp
 
 
 def create_app():
-    """
-    Application factory pattern
-    Creates and configures the Flask application
-    """
-    # Switch config based on environment
+    """Application factory pattern"""
     env = os.environ.get('FLASK_ENV', 'development')
     config_class = ProductionConfig if env == 'production' else DevelopmentConfig
 
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Enable CORS
+    # Enable CORS with explicit headers for cross-origin requests
     CORS(app,
          resources={r"/api/*": {"origins": app.config['CORS_ORIGINS']}},
-         supports_credentials=True)
+         supports_credentials=True,
+         allow_headers=["Content-Type", "Authorization"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     # Create data directory if it doesn't exist
     data_dir = os.path.dirname(app.config['DATABASE_PATH'])
@@ -51,7 +49,6 @@ def create_app():
     app.register_blueprint(student_bp)
     app.register_blueprint(admin_bp)
 
-    # Root endpoint
     @app.route('/')
     def index():
         return jsonify({
@@ -74,7 +71,6 @@ def create_app():
             }
         }), 200
 
-    # Health check endpoint
     @app.route('/health')
     def health():
         return jsonify({
@@ -83,50 +79,33 @@ def create_app():
             'ml_engine': 'initialized'
         }), 200
 
-    # Seed database endpoint (development only)
     @app.route('/api/seed-database', methods=['POST'])
     def seed_database():
         """Seed database with sample data - DEVELOPMENT ONLY"""
         if not app.config['DEBUG']:
-            return jsonify({
-                'success': False,
-                'error': 'This endpoint is only available in debug mode'
-            }), 403
-
+            return jsonify({'success': False, 'error': 'Only available in debug mode'}), 403
         try:
             db = app.config['DATABASE']
             db.seed_sample_data(num_records=30)
-            return jsonify({
-                'success': True,
-                'message': 'Database seeded with 30 sample reports'
-            }), 200
+            return jsonify({'success': True, 'message': 'Database seeded with 30 sample reports'}), 200
         except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': str(e)
-            }), 500
+            return jsonify({'success': False, 'error': str(e)}), 500
 
-    # Error handlers
     @app.errorhandler(404)
     def not_found(error):
-        return jsonify({
-            'success': False,
-            'error': 'Endpoint not found'
-        }), 404
+        return jsonify({'success': False, 'error': 'Endpoint not found'}), 404
 
     @app.errorhandler(500)
     def internal_error(error):
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error'
-        }), 500
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
 
     return app
 
 
-if __name__ == '__main__':
-    app = create_app()
+# WSGI entry point for waitress/gunicorn
+app = create_app()
 
+if __name__ == '__main__':
     print("\n" + "="*60)
     print("🚀 Pattern Tracking System Backend")
     print("="*60)
@@ -138,18 +117,8 @@ if __name__ == '__main__':
     print("\n📍 API Endpoints:")
     print("   Student: http://localhost:5000/api/student/*")
     print("   Admin:   http://localhost:5000/api/admin/*")
-    print("\n💡 Tip: Visit http://localhost:5000/ for API documentation")
     print("="*60 + "\n")
 
-    app.run(
-        host='0.0.0.0',
-        port=5000,
-        debug=app.config['DEBUG']
-    )
-    # Add this at module level, outside create_app()
-app = create_app()
-
-if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
         port=5000,
