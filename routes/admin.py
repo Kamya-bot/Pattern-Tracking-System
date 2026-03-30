@@ -60,7 +60,8 @@ def get_analytics():
         symptom_counts  = db.get_symptom_counts()
         location_counts = db.get_location_counts()
         severity_counts = db.get_severity_counts()
-        daily_counts    = db.get_daily_counts(days=14)
+        daily_counts_list = db.get_daily_counts(days=14)
+        daily_counts = {item['date']: item['count'] for item in daily_counts_list}
 
         ml_analysis = ml_engine.comprehensive_analysis(
             daily_counts=daily_counts,
@@ -85,7 +86,7 @@ def get_analytics():
                 'symptom_counts':  symptom_counts,
                 'location_counts': location_counts,
                 'severity_counts': severity_counts,
-                'daily_counts':    daily_counts,
+                'daily_counts':    daily_counts_list,
                 'ml_analysis':     ml_analysis,
                 'timestamp':       datetime.now().isoformat()
             }
